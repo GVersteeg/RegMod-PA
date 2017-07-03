@@ -1,0 +1,272 @@
+---
+title: "RegMod-Project. Research on the effect of automatic transmission on mileage per gallon (MPG)"
+author: "Gerrit Versteeg"
+date: "July 2nd, 2017"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+## 1. Synopsis (Overview)
+This report investigates the influence of automatic versus manual transmission on the mileage per gallon for cars. The results indicate that for a car of average weight and an average 1/4-mile time, a manual transmission adds 2.94 miles per gallon on the average 9.62 miles per gallon of a car with an automatic transmission. So using manual transmission is better for fuel-efficiency.
+
+## 2. Loading and preparing the data
+The help file for mtcars shows that the data consists of 11 numeric variables for 32 car models. The variables of interest are mpg (numeric: the mileage per US galon) and am (numeric: the transmission (auto = 0, manual = 1).
+First step is to load the necessary libraries and the 'mtcars' data from the library 'datasets'. We then put the data into a data frame (tibble) and make the numeric variable 'am' a factor variable.
+
+```{r data preparation, echo=TRUE, message=FALSE, warning=FALSE}
+library("GGally", quietly=TRUE, warn.conflicts = FALSE)    ## for ggpairs
+library("dplyr", quietly=TRUE, warn.conflicts = FALSE)     ## for data prep
+library("ggplot2", quietly=TRUE, warn.conflicts = FALSE)   ## for the graphs
+library("datasets", quietly=TRUE, warn.conflicts = FALSE)  ## for the data iself
+DF <- tbl_df(mtcars)               ## read data into tibble
+DF$am <- as.factor(DF$am)          ## set am from num to factor
+attach(DF)                         ## to reference column-names
+```
+
+## 2. Exploratory Data Analysis
+There are no missing values (NULL, NA's) for any of the variables in mtcars, so nothing needs to be imputed via some imputing strategy.
+
+First let's have a look at all variables and their correlations to get an impression of the dataset by looking at the ggpairs plot (see appendix, figure 1). The variables that have the largest correlation with our independent variable "am" are in descending order: gear (0.79), drat (0.71), wt (-0.69), disp (-0.59), cyl (-0.52). The remaining variables appear to be further specifications of the type of engine. Also there is a 0.6 correlation between am and mpg and the plot suggests an increase in mpg for cars with a manual transmission.
+
+## 3. Choosing the model
+I use a normal linear model, because the outcomes (mpg) are not binary, Bernoulli nor binomial and we are not looking at unbounded count data, rates or proportions. 
+
+Modelling a first fit with mpg as outcome and am as sole predictor, yields a promising result.
+
+```{r firstfit, ECHO = TRUE}
+fit1 <- lm(mpg~am)                         ## fitting just am
+summary(fit1)$coef
+```
+
+With 'am' as a factor variable, R sets the Intercept at the lowest reference level, being 0 (automatic transmission). The expected mpg for cars with automatic transmission is 17.15 mpg, while the expected mpg for cars with manual transmission is 24.39 (an additional 7.24 miles per US gallon). The relationship appears to be strongly significant (2.85e-04 being much lower than the $\alpha$-level 0.05). BUT the adjusted R-squared is only 0.3385, therefor only 34% of the variation in the dataset is explained through this first simple model.
+
+So it is necessary to determine which further variables to take into account while fitting our linear regression model, also to check for possible confounders that have an impact on the relationship between 'am' and 'mpg'. A factor analysis, like PCA, is possible but dangerous because I have no knowledge how to do that properly, so we need to rely on common sense and understanding of cars (the subject matter at hand). 
+
+Looking at the various variables in mtcars, we see that a lot of less correlated (with am) variables have to do with the type of engine (horsepower, no of cylinders, no of carburators, V/S-engine, displacement). To decrease the number of potential variables, we could consider the variable qsec (1/4 mile time, acceleration speed) to be a nicely combined 'representation' of the strength of the engine. The stronger the engine, the better the acceleration. The remaining variables: Rear axle ratio (drat), the no of forward gears (gear) and weight (wt) are less or not related to the type of engine and need to be taken into account. To determine which one of those variables play a influencing role we will use a variance table by fitting nested models with am while adding respectively qsec, wt, drat and gear.
+
+The code and resulting 'anaysis of variance' table is provided in figure 2 in the appendix. The resulting table shows that weight en qsec do have a high significance (using the normal error level ($\alpha = 0.05$) and therefor should be added to the final model, but gear and drat do not add much and can be dropped.
+
+## 4. Model fitting
+Considering the previous variance analysis the final model is a linear regression comparing transmission types on mpg (as outcome) while keeping weight en 1/4-mile time fixed on their average.
+
+```{r model fitting, ECHO = TRUE}
+fit <- lm(mpg ~ am + wt + qsec)   ## fitting the linear model
+round(summary(fit)$coef,4)       ## looking at the results
+```
+
+The result is that the expected value for mpg is now 9.62 for automatic transmission cars
+with an average weigth and 1/4-mile time. Switching to manual transmission generates an average increase of 2.94 mpg. Remarkable is also that the significance of the relationship between am and mpg, while taking wt and qsec into account is just slightly better than the normal error level ($\alpha = 0.05$). So in essence we will reject the hypothesis $H_0 = 0$ that claims that there is no relationship at all between am and mpg.
+We can also see that the adjusted R-squared is 0.8336, so approx. 83% of the total variance is explained by the model used.
+
+## 5. Checking the residuals
+Figure 3 in the appendix shows the frequently used residuals plots. Residuals vs. Fitted is nicely scattered with no clear patterns and no hetero-skedasticity. The Normal Q-Q plot, appears to be pretty straight.
+The Residuals vs. Leverage plot shows no points that go towards Cook's distance, indicating there are no real influencial outliers.
+
+## 6. Conclusions
+The regression model used predicts an increase of 2.94 mpg for cars with a manual transmission, over the average 9.62 mpg for cars with an automatic transmission. These numbers are based on cars with an average weight en 1/4-mile time. The relationship is considered significant (P-value: 0.047) based on a normal error level ($\alpha = 0.05$).
+
+
+## APPENDIX
+### Figure 1. The correlation between all variables of mtcars
+
+```{r CorOverview, echo=TRUE, message=FALSE, fig.align="center"}
+g = ggpairs(mtcars, lower=list(continuous="smooth"))
+g
+```
+
+### Figure 2. Analysis of variance table (ANOVA)
+
+```{r anova, ECHO = TRUE}
+fit1 <- lm(mpg~am)                         ## fitting just am
+fit2 <- lm(mpg~am+wt)                      ## fitting am and weight
+fit3 <- lm(mpg~am+wt+qsec)                 ## fitting am, weight and 1/4-mile time
+fit4 <- lm(mpg~am+wt+qsec+drat)            ## fitting am, weight, 1/4-mile time and rear axle ratio
+fit5 <- lm(mpg~am+wt+qsec+drat+gear)       ## fitting also no of gears
+anova(fit1, fit2, fit3, fit4, fit5)
+```
+
+
+### Figure 3. Residual-plots for fit
+
+```{r ResifPlots, ECHO=TRUE, message=FALSE, fig.align="center"}
+par(mfrow=c(2,2))    ## to plot 4 plots on one page
+plot(fit)            ## plot the quantiles
+```
+
+
+### Figure 3. Plotting the effect relationship on mpg for am and wt
+
+```{r Plotwt, ECHO=TRUE}
+x <- wt
+y <- mpg
+x0 <- DF[am==0,]$wt      ## splitting wt into cars with automatic transmission
+x1 <- DF[am==1,]$wt      ## and cars with manual transmission
+y0 <- DF[am==0,]$mpg     ## splitting mpg into mpg's for automatic transmission
+y1 <- DF[am==1,]$mpg     ## and mpg's for manual transmission
+plot (x, y, main = "mpg on am & wt", ylab="mpg", xlab="wt") ## baseplot x's and y's
+fits <- lm(y~x)          ## fit-single: fitting without taking am into account
+abline(fits, lwd=2)                     ## regr.line regardless of transmission
+abline(h=mean(y0), lwd =1, col="blue")  ## hor.line with mean of mpg (am = auto) 
+abline(h=mean(y1), lwd =1, col="red")   ## hor.line with mean of mpg (am = manual)
+fitm <- lm(y~x+am)                      ## fitting while taking am into account
+abline(coef(fitm)[1], coef(fitm)[2], lwd=1, col="blue")   ## regr.line: am=auto 
+abline(coef(fitm)[1]+coef(fitm)[3], coef(fitm)[2], lwd=1, col="red") ## am=manual
+points(x0, y0, pch=21, col= "black", bg = "lightblue", cex=1)  ## blue for am=0 pts
+points(x1, y1, pch=21, col= "black", bg = "salmon", cex=1)     ## red for am=1 pts
+```
+
+```{r Plotqsec, echo=FALSE}
+x <- qsec
+y <- mpg
+x0 <- DF[am==0,]$qsec      ## splitting wt into cars with automatic transmission
+x1 <- DF[am==1,]$qsec      ## and cars with manual transmission
+y0 <- DF[am==0,]$mpg   ## splitting mpg into mpg's for automatic transmission
+y1 <- DF[am==1,]$mpg   ## and mpg's for manual transmission
+plot (x, y, main = "mpg on am & qsec", ylab="mpg", xlab="qsec") ## baseplot x's and y's
+fits <- lm(y~x)          ## fit-single: fitting without taking am into account
+abline(fits, lwd=2)                     ## regr.line regardless of transmission
+abline(h=mean(y0), lwd =1, col="blue")  ## hor.line with mean of mpg (am = auto) 
+abline(h=mean(y1), lwd =1, col="red")   ## hor.line with mean of mpg (am = manual)
+fitm <- lm(y~x+am)                      ## fitting while taking am into account
+abline(coef(fitm)[1], coef(fitm)[2], lwd=1, col="blue")   ## regr.line: am=auto 
+abline(coef(fitm)[1]+coef(fitm)[3], coef(fitm)[2], lwd=1, col="red") ## am=manual
+points(x0, y0, pch=21, col= "black", bg = "lightblue", cex=1)  ## blue for am=0 pts
+points(x1, y1, pch=21, col= "black", bg = "salmon", cex=1)     ## red for am=1 pts
+```
+
+```{r Plotgear, echo=FALSE}
+x <- gear
+y <- mpg
+x0 <- DF[am==0,]$gear      ## splitting wt into cars with automatic transmission
+x1 <- DF[am==1,]$gear      ## and cars with manual transmission
+y0 <- DF[am==0,]$mpg   ## splitting mpg into mpg's for automatic transmission
+y1 <- DF[am==1,]$mpg   ## and mpg's for manual transmission
+plot (x, y, main = "mpg on am & gear", ylab="mpg", xlab="gear") ## baseplot x's and y's
+fits <- lm(y~x)          ## fit-single: fitting without taking am into account
+abline(fits, lwd=2)                     ## regr.line regardless of transmission
+abline(h=mean(y0), lwd =1, col="blue")  ## hor.line with mean of mpg (am = auto) 
+abline(h=mean(y1), lwd =1, col="red")   ## hor.line with mean of mpg (am = manual)
+fitm <- lm(y~x+am)                      ## fitting while taking am into account
+abline(coef(fitm)[1], coef(fitm)[2], lwd=1, col="blue")   ## regr.line: am=auto 
+abline(coef(fitm)[1]+coef(fitm)[3], coef(fitm)[2], lwd=1, col="red") ## am=manual
+points(x0, y0, pch=21, col= "black", bg = "lightblue", cex=1)  ## blue for am=0 pts
+points(x1, y1, pch=21, col= "black", bg = "salmon", cex=1)     ## red for am=1 pts
+```
+
+```{r Plotdrat, echo=FALSE}
+x <- drat
+y <- mpg
+x0 <- DF[am==0,]$drat      ## splitting wt into cars with automatic transmission
+x1 <- DF[am==1,]$drat      ## and cars with manual transmission
+y0 <- DF[am==0,]$mpg   ## splitting mpg into mpg's for automatic transmission
+y1 <- DF[am==1,]$mpg   ## and mpg's for manual transmission
+plot (x, y, main = "mpg on am & drat", ylab="mpg", xlab="drat") ## baseplot x's and y's
+fits <- lm(y~x)          ## fit-single: fitting without taking am into account
+abline(fits, lwd=2)                     ## regr.line regardless of transmission
+abline(h=mean(y0), lwd =1, col="blue")  ## hor.line with mean of mpg (am = auto) 
+abline(h=mean(y1), lwd =1, col="red")   ## hor.line with mean of mpg (am = manual)
+fitm <- lm(y~x+am)                      ## fitting while taking am into account
+abline(coef(fitm)[1], coef(fitm)[2], lwd=1, col="blue")   ## regr.line: am=auto 
+abline(coef(fitm)[1]+coef(fitm)[3], coef(fitm)[2], lwd=1, col="red") ## am=manual
+points(x0, y0, pch=21, col= "black", bg = "lightblue", cex=1)  ## blue for am=0 pts
+points(x1, y1, pch=21, col= "black", bg = "salmon", cex=1)     ## red for am=1 pts
+```
+
+```{r Plotdisp, echo=FALSE}
+x <- disp
+y <- mpg
+x0 <- DF[am==0,]$disp      ## splitting wt into cars with automatic transmission
+x1 <- DF[am==1,]$disp      ## and cars with manual transmission
+y0 <- DF[am==0,]$mpg   ## splitting mpg into mpg's for automatic transmission
+y1 <- DF[am==1,]$mpg   ## and mpg's for manual transmission
+plot (x, y, main = "mpg on am & disp", ylab="mpg", xlab="disp") ## baseplot x's and y's
+fits <- lm(y~x)          ## fit-single: fitting without taking am into account
+abline(fits, lwd=2)                     ## regr.line regardless of transmission
+abline(h=mean(y0), lwd =1, col="blue")  ## hor.line with mean of mpg (am = auto) 
+abline(h=mean(y1), lwd =1, col="red")   ## hor.line with mean of mpg (am = manual)
+fitm <- lm(y~x+am)                      ## fitting while taking am into account
+abline(coef(fitm)[1], coef(fitm)[2], lwd=1, col="blue")   ## regr.line: am=auto 
+abline(coef(fitm)[1]+coef(fitm)[3], coef(fitm)[2], lwd=1, col="red") ## am=manual
+points(x0, y0, pch=21, col= "black", bg = "lightblue", cex=1)  ## blue for am=0 pts
+points(x1, y1, pch=21, col= "black", bg = "salmon", cex=1)     ## red for am=1 pts
+```
+
+```{r Plothp, echo=FALSE}
+x <- hp
+y <- mpg
+x0 <- DF[am==0,]$hp      ## splitting wt into cars with automatic transmission
+x1 <- DF[am==1,]$hp      ## and cars with manual transmission
+y0 <- DF[am==0,]$mpg   ## splitting mpg into mpg's for automatic transmission
+y1 <- DF[am==1,]$mpg   ## and mpg's for manual transmission
+plot (x, y, main = "mpg on am & hp", ylab="mpg", xlab="hp") ## baseplot x's and y's
+fits <- lm(y~x)          ## fit-single: fitting without taking am into account
+abline(fits, lwd=2)                     ## regr.line regardless of transmission
+abline(h=mean(y0), lwd =1, col="blue")  ## hor.line with mean of mpg (am = auto) 
+abline(h=mean(y1), lwd =1, col="red")   ## hor.line with mean of mpg (am = manual)
+fitm <- lm(y~x+am)                      ## fitting while taking am into account
+abline(coef(fitm)[1], coef(fitm)[2], lwd=1, col="blue")   ## regr.line: am=auto 
+abline(coef(fitm)[1]+coef(fitm)[3], coef(fitm)[2], lwd=1, col="red") ## am=manual
+points(x0, y0, pch=21, col= "black", bg = "lightblue", cex=1)  ## blue for am=0 pts
+points(x1, y1, pch=21, col= "black", bg = "salmon", cex=1)     ## red for am=1 pts
+```
+
+```{r Plotcyl, echo=FALSE}
+x <- cyl
+y <- mpg
+x0 <- DF[am==0,]$cyl      ## splitting wt into cars with automatic transmission
+x1 <- DF[am==1,]$cyl      ## and cars with manual transmission
+y0 <- DF[am==0,]$mpg   ## splitting mpg into mpg's for automatic transmission
+y1 <- DF[am==1,]$mpg   ## and mpg's for manual transmission
+plot (x, y, main = "mpg on am & cyl", ylab="mpg", xlab="cyl") ## baseplot x's and y's
+fits <- lm(y~x)          ## fit-single: fitting without taking am into account
+abline(fits, lwd=2)                     ## regr.line regardless of transmission
+abline(h=mean(y0), lwd =1, col="blue")  ## hor.line with mean of mpg (am = auto) 
+abline(h=mean(y1), lwd =1, col="red")   ## hor.line with mean of mpg (am = manual)
+fitm <- lm(y~x+am)                      ## fitting while taking am into account
+abline(coef(fitm)[1], coef(fitm)[2], lwd=1, col="blue")   ## regr.line: am=auto 
+abline(coef(fitm)[1]+coef(fitm)[3], coef(fitm)[2], lwd=1, col="red") ## am=manual
+points(x0, y0, pch=21, col= "black", bg = "lightblue", cex=1)  ## blue for am=0 pts
+points(x1, y1, pch=21, col= "black", bg = "salmon", cex=1)     ## red for am=1 pts
+```
+
+```{r Plotvs, echo=FALSE}
+x <- vs
+y <- mpg
+x0 <- DF[am==0,]$vs      ## splitting wt into cars with automatic transmission
+x1 <- DF[am==1,]$vs      ## and cars with manual transmission
+y0 <- DF[am==0,]$mpg   ## splitting mpg into mpg's for automatic transmission
+y1 <- DF[am==1,]$mpg   ## and mpg's for manual transmission
+plot (x, y, main = "mpg on am & vs", ylab="mpg", xlab="vs") ## baseplot x's and y's
+fits <- lm(y~x)          ## fit-single: fitting without taking am into account
+abline(fits, lwd=2)                     ## regr.line regardless of transmission
+abline(h=mean(y0), lwd =1, col="blue")  ## hor.line with mean of mpg (am = auto) 
+abline(h=mean(y1), lwd =1, col="red")   ## hor.line with mean of mpg (am = manual)
+fitm <- lm(y~x+am)                      ## fitting while taking am into account
+abline(coef(fitm)[1], coef(fitm)[2], lwd=1, col="blue")   ## regr.line: am=auto 
+abline(coef(fitm)[1]+coef(fitm)[3], coef(fitm)[2], lwd=1, col="red") ## am=manual
+points(x0, y0, pch=21, col= "black", bg = "lightblue", cex=1)  ## blue for am=0 pts
+points(x1, y1, pch=21, col= "black", bg = "salmon", cex=1)     ## red for am=1 pts
+```
+
+```{r Plotcarb, echo=FALSE}
+x <- carb
+y <- mpg
+x0 <- DF[am==0,]$carb      ## splitting wt into cars with automatic transmission
+x1 <- DF[am==1,]$carb      ## and cars with manual transmission
+y0 <- DF[am==0,]$mpg   ## splitting mpg into mpg's for automatic transmission
+y1 <- DF[am==1,]$mpg   ## and mpg's for manual transmission
+plot (x, y, main = "mpg on am & carb", ylab="mpg", xlab="carb") ## baseplot x's and y's
+fits <- lm(y~x)          ## fit-single: fitting without taking am into account
+abline(fits, lwd=2)                     ## regr.line regardless of transmission
+abline(h=mean(y0), lwd =1, col="blue")  ## hor.line with mean of mpg (am = auto) 
+abline(h=mean(y1), lwd =1, col="red")   ## hor.line with mean of mpg (am = manual)
+fitm <- lm(y~x+am)                      ## fitting while taking am into account
+abline(coef(fitm)[1], coef(fitm)[2], lwd=1, col="blue")   ## regr.line: am=auto 
+abline(coef(fitm)[1]+coef(fitm)[3], coef(fitm)[2], lwd=1, col="red") ## am=manual
+points(x0, y0, pch=21, col= "black", bg = "lightblue", cex=1)  ## blue for am=0 pts
+points(x1, y1, pch=21, col= "black", bg = "salmon", cex=1)     ## red for am=1 pts
+```
